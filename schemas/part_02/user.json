@@ -1,0 +1,11 @@
+{
+	"definitions": {},
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"$id": "https://example.com/object1700526343.json",
+	"title": "Root",
+	"type": "object",
+	"required": [
+		"data",
+		"support"
+	]
+}

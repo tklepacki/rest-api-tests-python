@@ -1,23 +1,28 @@
 from __future__ import annotations
-import sys
-from enum import Enum, auto
-from typing import Sequence
 
+from enum import auto
+from enum import Enum
+from queue import Empty
+from queue import Queue
+import sys
+from typing import Any
+from typing import Sequence
+import warnings
+
+import execnet
 import pytest
 
 from xdist.remote import Producer
+from xdist.remote import WorkerInfo
+from xdist.scheduler import EachScheduling
+from xdist.scheduler import LoadFileScheduling
+from xdist.scheduler import LoadGroupScheduling
+from xdist.scheduler import LoadScheduling
+from xdist.scheduler import LoadScopeScheduling
+from xdist.scheduler import Scheduling
+from xdist.scheduler import WorkStealingScheduling
 from xdist.workermanage import NodeManager
-from xdist.scheduler import (
-    EachScheduling,
-    LoadScheduling,
-    LoadScopeScheduling,
-    LoadFileScheduling,
-    LoadGroupScheduling,
-    WorkStealingScheduling,
-)
-
-
-from queue import Empty, Queue
+from xdist.workermanage import WorkerController
 
 
 class Interrupted(KeyboardInterrupt):
@@ -25,7 +30,7 @@ class Interrupted(KeyboardInterrupt):
 
 
 class DSession:
-    """A pytest plugin which runs a distributed test session
+    """A pytest plugin which runs a distributed test session.
 
     At the beginning of the test session this creates a NodeManager
     instance which creates and starts all nodes.  Nodes then emit
@@ -38,42 +43,44 @@ class DSession:
     it will wait for instructions.
     """
 
-    def __init__(self, config):
+    shouldstop: bool | str
+
+    def __init__(self, config: pytest.Config) -> None:
         self.config = config
         self.log = Producer("dsession", enabled=config.option.debug)
-        self.nodemanager = None
-        self.sched = None
+        self.nodemanager: NodeManager | None = None
+        self.sched: Scheduling | None = None
         self.shuttingdown = False
         self.countfailures = 0
-        self.maxfail = config.getvalue("maxfail")
-        self.queue = Queue()
-        self._session = None
-        self._failed_collection_errors = {}
-        self._active_nodes = set()
+        self.maxfail: int = config.getvalue("maxfail")
+        self.queue: Queue[tuple[str, dict[str, Any]]] = Queue()
+        self._session: pytest.Session | None = None
+        self._failed_collection_errors: dict[object, bool] = {}
+        self._active_nodes: set[WorkerController] = set()
         self._failed_nodes_count = 0
         self._max_worker_restart = get_default_max_worker_restart(self.config)
         # summary message to print at the end of the session
-        self._summary_report = None
+        self._summary_report: str | None = None
         self.terminal = config.pluginmanager.getplugin("terminalreporter")
         if self.terminal:
             self.trdist = TerminalDistReporter(config)
             config.pluginmanager.register(self.trdist, "terminaldistreporter")
 
     @property
-    def session_finished(self):
-        """Return True if the distributed session has finished
+    def session_finished(self) -> bool:
+        """Return True if the distributed session has finished.
 
         This means all nodes have executed all test items.  This is
         used by pytest_runtestloop to break out of its loop.
         """
         return bool(self.shuttingdown and not self._active_nodes)
 
-    def report_line(self, line):
+    def report_line(self, line: str) -> None:
         if self.terminal and self.config.option.verbose >= 0:
             self.terminal.write_line(line)
 
     @pytest.hookimpl(trylast=True)
-    def pytest_sessionstart(self, session):
+    def pytest_sessionstart(self, session: pytest.Session) -> None:
         """Creates and starts the nodes.
 
         The nodes are setup to put their events onto self.queue.  As
@@ -85,7 +92,7 @@ class DSession:
         self._session = session
 
     @pytest.hookimpl
-    def pytest_sessionfinish(self, session):
+    def pytest_sessionfinish(self) -> None:
         """Shutdown all nodes."""
         nm = getattr(self, "nodemanager", None)  # if not fully initialized
         if nm is not None:
@@ -93,25 +100,33 @@ class DSession:
         self._session = None
 
     @pytest.hookimpl
-    def pytest_collection(self):
+    def pytest_collection(self) -> bool:
         # prohibit collection of test items in controller process
         return True
 
     @pytest.hookimpl(trylast=True)
-    def pytest_xdist_make_scheduler(self, config, log):
+    def pytest_xdist_make_scheduler(
+        self,
+        config: pytest.Config,
+        log: Producer,
+    ) -> Scheduling | None:
         dist = config.getvalue("dist")
-        schedulers = {
-            "each": EachScheduling,
-            "load": LoadScheduling,
-            "loadscope": LoadScopeScheduling,
-            "loadfile": LoadFileScheduling,
-            "loadgroup": LoadGroupScheduling,
-            "worksteal": WorkStealingScheduling,
-        }
-        return schedulers[dist](config, log)
+        if dist == "each":
+            return EachScheduling(config, log)
+        if dist == "load":
+            return LoadScheduling(config, log)
+        if dist == "loadscope":
+            return LoadScopeScheduling(config, log)
+        if dist == "loadfile":
+            return LoadFileScheduling(config, log)
+        if dist == "loadgroup":
+            return LoadGroupScheduling(config, log)
+        if dist == "worksteal":
+            return WorkStealingScheduling(config, log)
+        return None
 
     @pytest.hookimpl
-    def pytest_runtestloop(self):
+    def pytest_runtestloop(self) -> bool:
         self.sched = self.config.hook.pytest_xdist_make_scheduler(
             config=self.config, log=self.log
         )
@@ -128,7 +143,7 @@ class DSession:
             raise pending_exception
         return True
 
-    def loop_once(self):
+    def loop_once(self) -> None:
         """Process one callback from one of the workers."""
         while 1:
             if not self._active_nodes:
@@ -146,6 +161,7 @@ class DSession:
         call = getattr(self, method)
         self.log("calling method", method, kwargs)
         call(**kwargs)
+        assert self.sched is not None
         if self.sched.tests_finished:
             self.triggershutdown()
 
@@ -153,7 +169,11 @@ class DSession:
     # callbacks for processing events from workers
     #
 
-    def worker_workerready(self, node, workerinfo):
+    def worker_workerready(
+        self,
+        node: WorkerController,
+        workerinfo: WorkerInfo,
+    ) -> None:
         """Emitted when a node first starts up.
 
         This adds the node to the scheduler, nodes continue with
@@ -167,9 +187,10 @@ class DSession:
         if self.shuttingdown:
             node.shutdown()
         else:
+            assert self.sched is not None
             self.sched.add_node(node)
 
-    def worker_workerfinished(self, node):
+    def worker_workerfinished(self, node: WorkerController) -> None:
         """Emitted when node executes its pytest_sessionfinish hook.
 
         Removes the node from the scheduler.
@@ -182,12 +203,23 @@ class DSession:
             self.shouldstop = f"{node} received keyboard-interrupt"
             self.worker_errordown(node, "keyboard-interrupt")
             return
-        if node in self.sched.nodes:
-            crashitem = self.sched.remove_node(node)
-            assert not crashitem, (crashitem, node)
+        shouldfail = node.workeroutput["shouldfail"]
+        shouldstop = node.workeroutput["shouldstop"]
+        for shouldx in [shouldfail, shouldstop]:
+            if shouldx:
+                if not self.shouldstop:
+                    self.shouldstop = shouldx
+                break
+        else:
+            assert self.sched is not None
+            if node in self.sched.nodes:
+                crashitem = self.sched.remove_node(node)
+                assert not crashitem, (crashitem, node)
         self._active_nodes.remove(node)
 
-    def worker_internal_error(self, node, formatted_error):
+    def worker_internal_error(
+        self, node: WorkerController, formatted_error: str
+    ) -> None:
         """
         pytest_internalerror() was called on the worker.
 
@@ -199,15 +231,14 @@ class DSession:
         try:
             assert False, formatted_error
         except AssertionError:
-            from _pytest._code import ExceptionInfo
-
-            excinfo = ExceptionInfo.from_current()
+            excinfo = pytest.ExceptionInfo.from_current()
             excrepr = excinfo.getrepr()
             self.config.hook.pytest_internalerror(excrepr=excrepr, excinfo=excinfo)
 
-    def worker_errordown(self, node, error):
+    def worker_errordown(self, node: WorkerController, error: object | None) -> None:
         """Emitted by the WorkerController when a node dies."""
         self.config.hook.pytest_testnodedown(node=node, error=error)
+        assert self.sched is not None
         try:
             crashitem = self.sched.remove_node(node)
         except KeyError:
@@ -223,11 +254,9 @@ class DSession:
         )
         if maximum_reached:
             if self._max_worker_restart == 0:
-                msg = "worker {} crashed and worker restarting disabled".format(
-                    node.gateway.id
-                )
+                msg = f"worker {node.gateway.id} crashed and worker restarting disabled"
             else:
-                msg = "maximum crashed workers reached: %d" % self._max_worker_restart
+                msg = f"maximum crashed workers reached: {self._max_worker_restart}"
             self._summary_report = msg
             self.report_line("\n" + msg)
             self.triggershutdown()
@@ -238,12 +267,14 @@ class DSession:
         self._active_nodes.remove(node)
 
     @pytest.hookimpl
-    def pytest_terminal_summary(self, terminalreporter):
+    def pytest_terminal_summary(self, terminalreporter: Any) -> None:
         if self.config.option.verbose >= 0 and self._summary_report:
             terminalreporter.write_sep("=", f"xdist: {self._summary_report}")
 
-    def worker_collectionfinish(self, node, ids):
-        """worker has finished test collection.
+    def worker_collectionfinish(
+        self, node: WorkerController, ids: Sequence[str]
+    ) -> None:
+        """Worker has finished test collection.
 
         This adds the collection for this node to the scheduler.  If
         the scheduler indicates collection is finished (i.e. all
@@ -256,7 +287,9 @@ class DSession:
         self.config.hook.pytest_xdist_node_collection_finished(node=node, ids=ids)
         # tell session which items were effectively collected otherwise
         # the controller node will finish the session with EXIT_NOTESTSCOLLECTED
+        assert self._session is not None
         self._session.testscollected = len(ids)
+        assert self.sched is not None
         self.sched.add_node_collection(node, ids)
         if self.terminal:
             self.trdist.setstatus(
@@ -272,29 +305,44 @@ class DSession:
                     )
             self.sched.schedule()
 
-    def worker_logstart(self, node, nodeid, location):
+    def worker_logstart(
+        self,
+        node: WorkerController,
+        nodeid: str,
+        location: tuple[str, int | None, str],
+    ) -> None:
         """Emitted when a node calls the pytest_runtest_logstart hook."""
         self.config.hook.pytest_runtest_logstart(nodeid=nodeid, location=location)
 
-    def worker_logfinish(self, node, nodeid, location):
+    def worker_logfinish(
+        self,
+        node: WorkerController,
+        nodeid: str,
+        location: tuple[str, int | None, str],
+    ) -> None:
         """Emitted when a node calls the pytest_runtest_logfinish hook."""
         self.config.hook.pytest_runtest_logfinish(nodeid=nodeid, location=location)
 
-    def worker_testreport(self, node, rep):
+    def worker_testreport(self, node: WorkerController, rep: pytest.TestReport) -> None:
         """Emitted when a node calls the pytest_runtest_logreport hook."""
-        rep.node = node
+        rep.node = node  # type: ignore[attr-defined]
         self.config.hook.pytest_runtest_logreport(report=rep)
         self._handlefailures(rep)
 
-    def worker_runtest_protocol_complete(self, node, item_index, duration):
+    def worker_runtest_protocol_complete(
+        self, node: WorkerController, item_index: int, duration: float
+    ) -> None:
         """
         Emitted when a node fires the 'runtest_protocol_complete' event,
         signalling that a test has completed the runtestprotocol and should be
         removed from the pending list in the scheduler.
         """
+        assert self.sched is not None
         self.sched.mark_test_complete(node, item_index, duration)
 
-    def worker_unscheduled(self, node, indices):
+    def worker_unscheduled(
+        self, node: WorkerController, indices: Sequence[int]
+    ) -> None:
         """
         Emitted when a node fires the 'unscheduled' event, signalling that
         some tests have been removed from the worker's queue and should be
@@ -303,9 +351,14 @@ class DSession:
         This should happen only in response to 'steal' command, so schedulers
         not using 'steal' command don't have to implement it.
         """
+        assert self.sched is not None
         self.sched.remove_pending_tests_from_node(node, indices)
 
-    def worker_collectreport(self, node, rep):
+    def worker_collectreport(
+        self,
+        node: WorkerController,
+        rep: pytest.CollectReport | pytest.TestReport,
+    ) -> None:
         """Emitted when a node calls the pytest_collectreport hook.
 
         Because we only need the report when there's a failure/skip, as optimization
@@ -314,21 +367,20 @@ class DSession:
         assert not rep.passed
         self._failed_worker_collectreport(node, rep)
 
-    def worker_warning_captured(self, warning_message, when, item):
-        """Emitted when a node calls the pytest_warning_captured hook (deprecated in 6.0)."""
-        # This hook as been removed in pytest 7.1, and we can remove support once we only
-        # support pytest >=7.1.
-        kwargs = dict(warning_message=warning_message, when=when, item=item)
-        self.config.hook.pytest_warning_captured.call_historic(kwargs=kwargs)
-
-    def worker_warning_recorded(self, warning_message, when, nodeid, location):
+    def worker_warning_recorded(
+        self,
+        warning_message: warnings.WarningMessage,
+        when: str,
+        nodeid: str,
+        location: tuple[str, int, str] | None,
+    ) -> None:
         """Emitted when a node calls the pytest_warning_recorded hook."""
         kwargs = dict(
             warning_message=warning_message, when=when, nodeid=nodeid, location=location
         )
         self.config.hook.pytest_warning_recorded.call_historic(kwargs=kwargs)
 
-    def _clone_node(self, node):
+    def _clone_node(self, node: WorkerController) -> WorkerController:
         """Return new node based on an existing one.
 
         This is normally for when a node dies, this will copy the spec
@@ -338,12 +390,17 @@ class DSession:
         """
         spec = node.gateway.spec
         spec.id = None
+        assert self.nodemanager is not None
         self.nodemanager.group.allocate_id(spec)
-        node = self.nodemanager.setup_node(spec, self.queue.put)
-        self._active_nodes.add(node)
-        return node
+        clone = self.nodemanager.setup_node(spec, self.queue.put)
+        self._active_nodes.add(clone)
+        return clone
 
-    def _failed_worker_collectreport(self, node, rep):
+    def _failed_worker_collectreport(
+        self,
+        node: WorkerController,
+        rep: pytest.CollectReport | pytest.TestReport,
+    ) -> None:
         # Check we haven't already seen this report (from
         # another worker).
         if rep.longrepr not in self._failed_collection_errors:
@@ -351,7 +408,10 @@ class DSession:
             self.config.hook.pytest_collectreport(report=rep)
             self._handlefailures(rep)
 
-    def _handlefailures(self, rep):
+    def _handlefailures(
+        self,
+        rep: pytest.CollectReport | pytest.TestReport,
+    ) -> None:
         if rep.failed:
             self.countfailures += 1
             if (
@@ -361,23 +421,28 @@ class DSession:
             ):
                 self.shouldstop = f"stopping after {self.countfailures} failures"
 
-    def triggershutdown(self):
+    def triggershutdown(self) -> None:
         if not self.shuttingdown:
             self.log("triggering shutdown")
             self.shuttingdown = True
+            assert self.sched is not None
             for node in self.sched.nodes:
                 node.shutdown()
 
-    def handle_crashitem(self, nodeid, worker):
+    def handle_crashitem(self, nodeid: str, worker: WorkerController) -> None:
         # XXX get more reporting info by recording pytest_runtest_logstart?
         # XXX count no of failures and retry N times
-        runner = self.config.pluginmanager.getplugin("runner")
         fspath = nodeid.split("::")[0]
         msg = f"worker {worker.gateway.id!r} crashed while running {nodeid!r}"
-        rep = runner.TestReport(
-            nodeid, (fspath, None, fspath), (), "failed", msg, "???"
+        rep = pytest.TestReport(
+            nodeid=nodeid,
+            location=(fspath, None, fspath),
+            keywords={},
+            outcome="failed",
+            longrepr=msg,
+            when="???",  # type: ignore[arg-type]
         )
-        rep.node = worker
+        rep.node = worker  # type: ignore[attr-defined]
 
         self.config.hook.pytest_handlecrashitem(
             crashitem=nodeid,
@@ -404,10 +469,10 @@ class WorkerStatus(Enum):
 
 
 class TerminalDistReporter:
-    def __init__(self, config) -> None:
+    def __init__(self, config: pytest.Config) -> None:
         self.config = config
         self.tr = config.pluginmanager.getplugin("terminalreporter")
-        self._status: dict[str, tuple[WorkerStatus, int]] = {}
+        self._status: dict[object, tuple[WorkerStatus, int]] = {}
         self._lastlen = 0
         self._isatty = getattr(self.tr, "isatty", self.tr.hasmarkup)
 
@@ -419,7 +484,12 @@ class TerminalDistReporter:
             self.write_line(self.getstatus())
 
     def setstatus(
-        self, spec, status: WorkerStatus, *, tests_collected: int, show: bool = True
+        self,
+        spec: execnet.XSpec,
+        status: WorkerStatus,
+        *,
+        tests_collected: int,
+        show: bool = True,
     ) -> None:
         self._status[spec.id] = (status, tests_collected)
         if show and self._isatty:
@@ -433,7 +503,7 @@ class TerminalDistReporter:
 
         return "bringing up nodes..."
 
-    def rewrite(self, line, newline=False):
+    def rewrite(self, line: str, newline: bool = False) -> None:
         pline = line + " " * max(self._lastlen - len(line), 0)
         if newline:
             self._lastlen = 0
@@ -443,7 +513,7 @@ class TerminalDistReporter:
         self.tr.rewrite(pline, bold=True)
 
     @pytest.hookimpl
-    def pytest_xdist_setupnodes(self, specs) -> None:
+    def pytest_xdist_setupnodes(self, specs: Sequence[execnet.XSpec]) -> None:
         self._specs = specs
         for spec in specs:
             self.setstatus(spec, WorkerStatus.Created, tests_collected=0, show=False)
@@ -451,12 +521,12 @@ class TerminalDistReporter:
         self.ensure_show_status()
 
     @pytest.hookimpl
-    def pytest_xdist_newgateway(self, gateway) -> None:
+    def pytest_xdist_newgateway(self, gateway: execnet.Gateway) -> None:
         if self.config.option.verbose > 0:
             rinfo = gateway._rinfo()
             different_interpreter = rinfo.executable != sys.executable
             if different_interpreter:
-                version = "%s.%s.%s" % rinfo.version_info[:3]
+                version = "{}.{}.{}".format(*rinfo.version_info[:3])
                 self.rewrite(
                     f"[{gateway.id}] {rinfo.platform} Python {version} cwd: {rinfo.cwd}",
                     newline=True,
@@ -464,7 +534,7 @@ class TerminalDistReporter:
         self.setstatus(gateway.spec, WorkerStatus.Initialized, tests_collected=0)
 
     @pytest.hookimpl
-    def pytest_testnodeready(self, node) -> None:
+    def pytest_testnodeready(self, node: WorkerController) -> None:
         if self.config.option.verbose > 0:
             d = node.workerinfo
             different_interpreter = d.get("executable") != sys.executable
@@ -476,28 +546,30 @@ class TerminalDistReporter:
         )
 
     @pytest.hookimpl
-    def pytest_testnodedown(self, node, error) -> None:
+    def pytest_testnodedown(self, node: WorkerController, error: object) -> None:
         if not error:
             return
         self.write_line(f"[{node.gateway.id}] node down: {error}")
 
 
-def get_default_max_worker_restart(config):
-    """gets the default value of --max-worker-restart option if it is not provided.
+def get_default_max_worker_restart(config: pytest.Config) -> int | None:
+    """Gets the default value of --max-worker-restart option if it is not provided.
 
     Use a reasonable default to avoid workers from restarting endlessly due to crashing collections (#226).
     """
-    result = config.option.maxworkerrestart
-    if result is not None:
-        result = int(result)
+    result_str: str | None = config.option.maxworkerrestart
+    if result_str is not None:
+        result = int(result_str)
     elif config.option.numprocesses:
         # if --max-worker-restart was not provided, use a reasonable default (#226)
         result = config.option.numprocesses * 4
+    else:
+        result = None
     return result
 
 
 def get_workers_status_line(
-    status_and_items: Sequence[tuple[WorkerStatus, int]]
+    status_and_items: Sequence[tuple[WorkerStatus, int]],
 ) -> str:
     """
     Return the line to display during worker setup/collection based on the

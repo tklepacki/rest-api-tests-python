@@ -32,7 +32,7 @@ export-env {
       }
     }
 
-    let virtual_env = 'C:\Users\tklep\Desktop\rest-api-tests-python\myenv'
+    let virtual_env = 'C:\Users\tklep\rest-api-tests-python\myenv'
     let bin = 'Scripts'
 
     let is_windows = ($nu.os-info.family) == 'windows'

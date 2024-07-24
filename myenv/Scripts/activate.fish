@@ -58,7 +58,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV 'C:\Users\tklep\Desktop\rest-api-tests-python\myenv'
+set -gx VIRTUAL_ENV 'C:\Users\tklep\rest-api-tests-python\myenv'
 
 # https://github.com/fish-shell/fish-shell/issues/436 altered PATH handling
 if test (echo $FISH_VERSION | head -c 1) -lt 3

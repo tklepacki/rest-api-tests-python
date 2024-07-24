@@ -1,4 +1,4 @@
-@set "VIRTUAL_ENV=C:\Users\tklep\Desktop\rest-api-tests-python\myenv"
+@set "VIRTUAL_ENV=C:\Users\tklep\rest-api-tests-python\myenv"
 
 @set "VIRTUAL_ENV_PROMPT="
 @if NOT DEFINED VIRTUAL_ENV_PROMPT (

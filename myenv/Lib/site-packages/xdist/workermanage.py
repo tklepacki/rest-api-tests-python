@@ -1,22 +1,32 @@
+from __future__ import annotations
+
+import enum
 import fnmatch
 import os
+from pathlib import Path
 import re
 import sys
+from typing import Any
+from typing import Callable
+from typing import Literal
+from typing import Sequence
+from typing import Union
 import uuid
-from pathlib import Path
-from typing import List, Union, Sequence, Optional, Any, Tuple, Set
+import warnings
 
-import pytest
 import execnet
+import pytest
 
+from xdist.plugin import _sys_path
 import xdist.remote
 from xdist.remote import Producer
-from xdist.plugin import _sys_path
+from xdist.remote import WorkerInfo
 
 
-def parse_spec_config(config):
+def parse_spec_config(config: pytest.Config) -> list[str]:
     xspeclist = []
-    for xspec in config.getvalue("tx"):
+    tx: list[str] = config.getvalue("tx")
+    for xspec in tx:
         i = xspec.find("*")
         try:
             num = int(xspec[:i])
@@ -35,64 +45,81 @@ class NodeManager:
     EXIT_TIMEOUT = 10
     DEFAULT_IGNORES = [".*", "*.pyc", "*.pyo", "*~"]
 
-    def __init__(self, config, specs=None, defaultchdir="pyexecnetcache") -> None:
+    def __init__(
+        self,
+        config: pytest.Config,
+        specs: Sequence[execnet.XSpec | str] | None = None,
+        defaultchdir: str = "pyexecnetcache",
+    ) -> None:
         self.config = config
         self.trace = self.config.trace.get("nodemanager")
         self.testrunuid = self.config.getoption("testrunuid")
         if self.testrunuid is None:
             self.testrunuid = uuid.uuid4().hex
-        self.group = execnet.Group()
+        self.group = execnet.Group(execmodel="main_thread_only")
         if specs is None:
             specs = self._getxspecs()
-        self.specs = []
+        self.specs: list[execnet.XSpec] = []
         for spec in specs:
             if not isinstance(spec, execnet.XSpec):
                 spec = execnet.XSpec(spec)
+            if getattr(spec, "execmodel", None) != "main_thread_only":
+                spec = execnet.XSpec(f"execmodel=main_thread_only//{spec}")
             if not spec.chdir and not spec.popen:
                 spec.chdir = defaultchdir
             self.group.allocate_id(spec)
             self.specs.append(spec)
         self.roots = self._getrsyncdirs()
         self.rsyncoptions = self._getrsyncoptions()
-        self._rsynced_specs: Set[Tuple[Any, Any]] = set()
+        self._rsynced_specs: set[tuple[Any, Any]] = set()
 
-    def rsync_roots(self, gateway):
+    def rsync_roots(self, gateway: execnet.Gateway) -> None:
         """Rsync the set of roots to the node's gateway cwd."""
         if self.roots:
             for root in self.roots:
                 self.rsync(gateway, root, **self.rsyncoptions)
 
-    def setup_nodes(self, putevent):
+    def setup_nodes(
+        self,
+        putevent: Callable[[tuple[str, dict[str, Any]]], None],
+    ) -> list[WorkerController]:
         self.config.hook.pytest_xdist_setupnodes(config=self.config, specs=self.specs)
         self.trace("setting up nodes")
         return [self.setup_node(spec, putevent) for spec in self.specs]
 
-    def setup_node(self, spec, putevent):
+    def setup_node(
+        self,
+        spec: execnet.XSpec,
+        putevent: Callable[[tuple[str, dict[str, Any]]], None],
+    ) -> WorkerController:
+        if getattr(spec, "execmodel", None) != "main_thread_only":
+            spec = execnet.XSpec(f"execmodel=main_thread_only//{spec}")
         gw = self.group.makegateway(spec)
         self.config.hook.pytest_xdist_newgateway(gateway=gw)
         self.rsync_roots(gw)
         node = WorkerController(self, gw, self.config, putevent)
-        gw.node = node  # keep the node alive
+        # Keep the node alive.
+        gw.node = node  # type: ignore[attr-defined]
         node.setup()
         self.trace("started node %r" % node)
         return node
 
-    def teardown_nodes(self):
+    def teardown_nodes(self) -> None:
         self.group.terminate(self.EXIT_TIMEOUT)
 
-    def _getxspecs(self):
+    def _getxspecs(self) -> list[execnet.XSpec]:
         return [execnet.XSpec(x) for x in parse_spec_config(self.config)]
 
-    def _getrsyncdirs(self) -> List[Path]:
+    def _getrsyncdirs(self) -> list[Path]:
         for spec in self.specs:
             if not spec.popen or spec.chdir:
                 break
         else:
             return []
-        import pytest
         import _pytest
+        import pytest
 
-        def get_dir(p):
+        def get_dir(p: str) -> str:
             """Return the directory path if p is a package or the path to the .py file otherwise."""
             stripped = p.rstrip("co")
             if os.path.basename(stripped) == "__init__.py":
@@ -110,14 +137,14 @@ class NodeManager:
             candidates.extend(rsyncroots)
         roots = []
         for root in candidates:
-            root = Path(root).resolve()
-            if not root.exists():
+            root_path = Path(root).resolve()
+            if not root_path.exists():
                 raise pytest.UsageError(f"rsyncdir doesn't exist: {root!r}")
-            if root not in roots:
-                roots.append(root)
+            if root_path not in roots:
+                roots.append(root_path)
         return roots
 
-    def _getrsyncoptions(self):
+    def _getrsyncoptions(self) -> dict[str, Any]:
         """Get options to be passed for rsync."""
         ignores = list(self.DEFAULT_IGNORES)
         ignores += [str(path) for path in self.config.option.rsyncignore]
@@ -128,12 +155,21 @@ class NodeManager:
             "verbose": getattr(self.config.option, "verbose", 0),
         }
 
-    def rsync(self, gateway, source, notify=None, verbose=False, ignores=None):
+    def rsync(
+        self,
+        gateway: execnet.Gateway,
+        source: str | os.PathLike[str],
+        notify: (
+            Callable[[str, execnet.XSpec, str | os.PathLike[str]], Any] | None
+        ) = None,
+        verbose: int = False,
+        ignores: Sequence[str] | None = None,
+    ) -> None:
         """Perform rsync to remote hosts for node."""
         # XXX This changes the calling behaviour of
         #     pytest_xdist_rsyncstart and pytest_xdist_rsyncfinish to
         #     be called once per rsync target.
-        rsync = HostRSync(source, verbose=verbose, ignores=ignores)
+        rsync = HostRSync(source, verbose=verbose > 0, ignores=ignores)
         spec = gateway.spec
         if spec.popen and not spec.chdir:
             # XXX This assumes that sources are python-packages
@@ -148,7 +184,7 @@ class NodeManager:
         if (spec, source) in self._rsynced_specs:
             return
 
-        def finished():
+        def finished() -> None:
             if notify:
                 notify("rsyncrootready", spec, source)
 
@@ -160,7 +196,7 @@ class NodeManager:
 
 
 class HostRSync(execnet.RSync):
-    """RSyncer that filters out common files"""
+    """RSyncer that filters out common files."""
 
     PathLike = Union[str, "os.PathLike[str]"]
 
@@ -168,13 +204,13 @@ class HostRSync(execnet.RSync):
         self,
         sourcedir: PathLike,
         *,
-        ignores: Optional[Sequence[PathLike]] = None,
-        **kwargs: object
+        ignores: Sequence[PathLike] | None = None,
+        verbose: bool = True,
     ) -> None:
         if ignores is None:
             ignores = []
         self._ignores = [re.compile(fnmatch.translate(os.fspath(x))) for x in ignores]
-        super().__init__(sourcedir=Path(sourcedir), **kwargs)
+        super().__init__(sourcedir=Path(sourcedir), verbose=verbose)
 
     def filter(self, path: PathLike) -> bool:
         path = Path(path)
@@ -184,18 +220,26 @@ class HostRSync(execnet.RSync):
         else:
             return True
 
-    def add_target_host(self, gateway, finished=None):
+    def add_target_host(
+        self,
+        gateway: execnet.Gateway,
+        finished: Callable[[], None] | None = None,
+    ) -> None:
         remotepath = os.path.basename(self._sourcedir)
         super().add_target(gateway, remotepath, finishedcallback=finished, delete=True)
 
-    def _report_send_file(self, gateway, modified_rel_path):
+    def _report_send_file(
+        self,
+        gateway: execnet.Gateway,  # type: ignore[override]
+        modified_rel_path: str,
+    ) -> None:
         if self._verbose > 0:
             path = os.path.basename(self._sourcedir) + "/" + modified_rel_path
             remotepath = gateway.spec.chdir
             print(f"{gateway.spec}:{remotepath} <= {path}")
 
 
-def make_reltoroot(roots: Sequence[Path], args: List[str]) -> List[str]:
+def make_reltoroot(roots: Sequence[Path], args: list[str]) -> list[str]:
     # XXX introduce/use public API for splitting pytest args
     splitcode = "::"
     result = []
@@ -210,7 +254,7 @@ def make_reltoroot(roots: Sequence[Path], args: List[str]) -> List[str]:
             result.append(arg)
             continue
         for root in roots:
-            x: Optional[Path]
+            x: Path | None
             try:
                 x = fspath.relative_to(root)
             except ValueError:
@@ -224,15 +268,26 @@ def make_reltoroot(roots: Sequence[Path], args: List[str]) -> List[str]:
     return result
 
 
+class Marker(enum.Enum):
+    END = -1
+
+
 class WorkerController:
-    ENDMARK = -1
+    # Set when the worker is ready.
+    workerinfo: WorkerInfo
 
     class RemoteHook:
         @pytest.hookimpl(trylast=True)
-        def pytest_xdist_getremotemodule(self):
+        def pytest_xdist_getremotemodule(self) -> Any:
             return xdist.remote
 
-    def __init__(self, nodemanager, gateway, config, putevent):
+    def __init__(
+        self,
+        nodemanager: NodeManager,
+        gateway: execnet.Gateway,
+        config: pytest.Config,
+        putevent: Callable[[tuple[str, dict[str, Any]]], None],
+    ) -> None:
         config.pluginmanager.register(self.RemoteHook())
         self.nodemanager = nodemanager
         self.putevent = putevent
@@ -248,22 +303,23 @@ class WorkerController:
         self._shutdown_sent = False
         self.log = Producer(f"workerctl-{gateway.id}", enabled=config.option.debug)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{self.__class__.__name__} {self.gateway.id}>"
 
     @property
-    def shutting_down(self):
+    def shutting_down(self) -> bool:
         return self._down or self._shutdown_sent
 
-    def setup(self):
+    def setup(self) -> None:
         self.log("setting up worker session")
+        # Cache rinfo for backward compatibility, since pytest-cov
+        # accesses rinfo while the main thread is busy executing our
+        # remote_exec call, which triggers a deadlock error for the
+        # main_thread_only execmodel if the rinfo has not been cached.
+        self.gateway._rinfo()
         spec = self.gateway.spec
-        if hasattr(self.config, "invocation_params"):
-            args = [str(x) for x in self.config.invocation_params.args or ()]
-            option_dict = {}
-        else:
-            args = self.config.args
-            option_dict = vars(self.config.option)
+        args = [str(x) for x in self.config.invocation_params.args or ()]
+        option_dict = {}
         if not spec.popen or spec.chdir:
             args = make_reltoroot(self.nodemanager.roots, args)
         if spec.popen:
@@ -280,10 +336,11 @@ class WorkerController:
         change_sys_path = _sys_path if self.gateway.spec.popen else None
         self.channel.send((self.workerinput, args, option_dict, change_sys_path))
 
-        if self.putevent:
-            self.channel.setcallback(self.process_from_remote, endmarker=self.ENDMARK)
+        # putevent is only None in a test.
+        if self.putevent:  # type: ignore[truthy-function]
+            self.channel.setcallback(self.process_from_remote, endmarker=Marker.END)
 
-    def ensure_teardown(self):
+    def ensure_teardown(self) -> None:
         if hasattr(self, "channel"):
             if not self.channel.isclosed():
                 self.log("closing", self.channel)
@@ -294,16 +351,16 @@ class WorkerController:
             self.gateway.exit()
             # del self.gateway
 
-    def send_runtest_some(self, indices):
+    def send_runtest_some(self, indices: Sequence[int]) -> None:
         self.sendcommand("runtests", indices=indices)
 
-    def send_runtest_all(self):
+    def send_runtest_all(self) -> None:
         self.sendcommand("runtests_all")
 
-    def send_steal(self, indices):
+    def send_steal(self, indices: Sequence[int]) -> None:
         self.sendcommand("steal", indices=indices)
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         if not self._down:
             try:
                 self.sendcommand("shutdown")
@@ -311,17 +368,19 @@ class WorkerController:
                 pass
             self._shutdown_sent = True
 
-    def sendcommand(self, name, **kwargs):
-        """send a named parametrized command to the other side."""
+    def sendcommand(self, name: str, **kwargs: object) -> None:
+        """Send a named parametrized command to the other side."""
         self.log(f"sending command {name}(**{kwargs})")
         self.channel.send((name, kwargs))
 
-    def notify_inproc(self, eventname, **kwargs):
+    def notify_inproc(self, eventname: str, **kwargs: object) -> None:
         self.log(f"queuing {eventname}(**{kwargs})")
         self.putevent((eventname, kwargs))
 
-    def process_from_remote(self, eventcall):  # noqa too complex
-        """this gets called for each object we receive from
+    def process_from_remote(
+        self, eventcall: tuple[str, dict[str, Any]] | Literal[Marker.END]
+    ) -> None:
+        """This gets called for each object we receive from
         the other side and if the channel closes.
 
         Note that channel callbacks run in the receiver
@@ -329,8 +388,8 @@ class WorkerController:
         avoid raising exceptions or doing heavy work.
         """
         try:
-            if eventcall == self.ENDMARK:
-                err = self.channel._getremoteerror()
+            if eventcall is Marker.END:
+                err: object | None = self.channel._getremoteerror()  # type: ignore[no-untyped-call]
                 if not self._down:
                     if not err or isinstance(err, EOFError):
                         err = "Not properly terminated"  # lost connection?
@@ -372,16 +431,6 @@ class WorkerController:
                     nodeid=kwargs["nodeid"],
                     fslocation=kwargs["nodeid"],
                 )
-            elif eventname == "warning_captured":
-                warning_message = unserialize_warning_message(
-                    kwargs["warning_message_data"]
-                )
-                self.notify_inproc(
-                    eventname,
-                    warning_message=warning_message,
-                    when=kwargs["when"],
-                    item=kwargs["item"],
-                )
             elif eventname == "warning_recorded":
                 warning_message = unserialize_warning_message(
                     kwargs["warning_message_data"]
@@ -398,18 +447,15 @@ class WorkerController:
         except KeyboardInterrupt:
             # should not land in receiver-thread
             raise
-        except:  # noqa
-            from _pytest._code import ExceptionInfo
-
-            excinfo = ExceptionInfo.from_current()
+        except BaseException:
+            excinfo = pytest.ExceptionInfo.from_current()
             print("!" * 20, excinfo)
             self.config.notify_exception(excinfo)
             self.shutdown()
             self.notify_inproc("errordown", node=self, error=excinfo)
 
 
-def unserialize_warning_message(data):
-    import warnings
+def unserialize_warning_message(data: dict[str, Any]) -> warnings.WarningMessage:
     import importlib
 
     if data["message_module"]:
@@ -447,4 +493,4 @@ def unserialize_warning_message(data):
             continue
         kwargs[attr_name] = data[attr_name]
 
-    return warnings.WarningMessage(**kwargs)  # type: ignore[arg-type]
+    return warnings.WarningMessage(**kwargs)

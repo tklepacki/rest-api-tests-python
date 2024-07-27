@@ -8,7 +8,7 @@ def test_get_user_request():
     user_data = user_response.json()['data']
 
     assert (user_response.status_code == 200), f"Status Code validation failed for {user_response.request.url}"
-    assert (user_data['id'] == 3), "User Id verfication failed"
+    assert (user_data['id'] == 2), "User Id verfication failed"
     assert (user_data['email'] == "janet.weaver@reqres.in"), "User Id verfication failed"
     assert (user_data['first_name'] == "Janet"), "First Name verfication failed"
     assert (user_data['last_name'] == "Weaver"), "Last Name verfication failed"

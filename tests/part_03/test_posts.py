@@ -8,10 +8,10 @@ def test_get_post_request():
     post_data = posts_response.json()
 
     assert (posts_response.status_code == 200), f"Status Code validation failed for {posts_response.request.url}"
-    assert (post_data['id'] == 1), "Post Id verfication failed"
-    assert (post_data['title'] == "json-server"), "Title verfication failed"
-    assert (post_data['author'] == "typicode"), "Author verfication failed"
-    assert (posts_response.headers['content-type'] == "application/json; charset=utf-8")
+    assert (post_data['id'] == "1"), "Post Id verfication failed"
+    assert (post_data['title'] == "a title"), "Title verfication failed"
+    assert (post_data['views'] == 100), "Views verfication failed"
+    assert (posts_response.headers['content-type'] == "application/json")
     yield
 
 @test_steps('test_get_posts_list_request')
@@ -24,21 +24,20 @@ def test_get_posts_list_request():
     for post in posts_lists_data:
         assert (post['id'] != ''), "Post Id not exist"
         assert (post['title'] != ''), "Title not exist"
-        assert (post['author'] != ''), "Author not exist"
     yield
 
 @test_steps('add_post_request')
 def test_add_post_request():
     body = {
         "title": "TestTitle",
-        "author": "TestAuthor",
+        "views": 100,
     }
     add_post_response = posts.add_post(body)
     added_post_data = add_post_response.json()
 
     assert (add_post_response.status_code == 201), f"Status Code validation failed for {add_post_response.request.url}"
     assert (added_post_data['title'] == "TestTitle"), "Title verfication failed"
-    assert (added_post_data['author'] == "TestAuthor"), "Author verfication failed"
+    assert (added_post_data['views'] == 100), "Views verfication failed"
 
     added_post_id = added_post_data['id']
 
@@ -48,27 +47,27 @@ def test_add_post_request():
     assert (posts_response.status_code == 200), f"Status Code validation failed for {posts_response.request.url}"
     assert (post_data['id'] == added_post_id), "Post Id verfication failed"
     assert (post_data['title'] == "TestTitle"), "Title verfication failed"
-    assert (post_data['author'] == "TestAuthor"), "Author verfication failed"
+    assert (post_data['views'] == 100), "Views verfication failed"
     yield
 
 @test_steps('edit_post_request')
 def test_edit_post_request():
     body = {
         "title": "TestTitle",
-        "author": "TestAuthor",
+        "views": 100,
     }
     add_post_response = posts.add_post(body)
     added_post_data = add_post_response.json()
 
     assert (add_post_response.status_code == 201), f"Status Code validation failed for {add_post_response.request.url}"
     assert (added_post_data['title'] == "TestTitle"), "Title verfication failed"
-    assert (added_post_data['author'] == "TestAuthor"), "Author verfication failed"
+    assert (added_post_data['views'] == 100), "Views verfication failed"
 
     added_post_id = added_post_data['id']
 
     body = {
         "title": "UpdatedTestTitle",
-        "author": "UpdatedTestAuthor",
+        "views": 500,
     }
 
     edit_post_response = posts.edit_post(added_post_id, body)
@@ -76,7 +75,7 @@ def test_edit_post_request():
 
     assert (edit_post_response.status_code == 200), f"Status Code validation failed for {edit_post_response.request.url}"
     assert (edit_post_data['title'] == "UpdatedTestTitle"), "Updated Title verfication failed"
-    assert (edit_post_data['author'] == "UpdatedTestAuthor"), "Updated Author verfication failed"
+    assert (edit_post_data['views'] == 500), "Updated Views verfication failed"
 
     posts_response = posts.get_post(added_post_id)
     post_data = posts_response.json()
@@ -84,21 +83,21 @@ def test_edit_post_request():
     assert (posts_response.status_code == 200), f"Status Code validation failed for {posts_response.request.url}"
     assert (post_data['id'] == added_post_id), "Updated Post Id verfication failed"
     assert (post_data['title'] == "UpdatedTestTitle"), "Updated Title verfication failed"
-    assert (post_data['author'] == "UpdatedTestAuthor"), "Updated Author verfication failed"
+    assert (post_data['views'] == 500), "Updated Views verfication failed"
     yield
 
 @test_steps('delete_post_request')
 def test_delete_post_request():
     body = {
         "title": "TestTitle",
-        "author": "TestAuthor",
+        "views": 100,
     }
     add_post_response = posts.add_post(body)
     added_post_data = add_post_response.json()
 
     assert (add_post_response.status_code == 201), f"Status Code validation failed for {add_post_response.request.url}"
     assert (added_post_data['title'] == "TestTitle"), "Title verfication failed"
-    assert (added_post_data['author'] == "TestAuthor"), "Author verfication failed"
+    assert (added_post_data['views'] == 100), "Views verfication failed"
 
     added_post_id = added_post_data['id']
 

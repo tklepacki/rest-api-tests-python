@@ -1,0 +1,3 @@
+[pytest11]
+steps = pytest_steps.plugin
+

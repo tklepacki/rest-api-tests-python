@@ -14,7 +14,6 @@ def test_get_user_request():
     assert (user_data['last_name'] == "Weaver"), "Last Name verfication failed"
     assert (user_data['avatar'] == "https://reqres.in/img/faces/2-image.jpg"), "Avatar verfication failed"
     assert (user_response.headers['content-type'] == "application/json; charset=utf-8")
-
     yield
 
 @test_steps('test_get_user_list_request')

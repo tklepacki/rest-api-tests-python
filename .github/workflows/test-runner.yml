@@ -38,6 +38,6 @@ jobs:
         with:
           name: test-results
           path: |
-                results.xml
+                result.xml
                 report.html
                 assets

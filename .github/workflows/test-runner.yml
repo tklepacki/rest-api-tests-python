@@ -3,7 +3,7 @@ run-name: Rest API Python Tests
 
 on:
   schedule:
-    - cron: '*/2 * * * *'
+    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       python_version:
@@ -32,13 +32,13 @@ jobs:
              pip install --upgrade pip
              pip install -r requirements.txt
              export PYTHONPATH=${PYTHONPATH}:${{ github.workspace }}
-             pytest -s tests/part_01/test_users.py --junitxml=result.xml --html=report.html
-        
+             pytest -s tests/part_01/test_users.py --junitxml=results.xml --html=report.html
+
       - name: Create Test Summary
         uses: test-summary/action@dist
         if: success() || failure()
         with:
-          paths: result.xml
+          paths: results.xml
 
       - name: Upload pytest Test Results
         uses: actions/upload-artifact@v3
@@ -46,6 +46,6 @@ jobs:
         with:
           name: test-results
           path: |
-                result.xml
+                results.xml
                 report.html
                 assets

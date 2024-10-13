@@ -30,4 +30,4 @@ jobs:
         uses: test-summary/action@dist
         if: success() || failure()
         with:
-          paths: results.xml
+          paths: result.xml

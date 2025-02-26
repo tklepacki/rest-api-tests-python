@@ -49,3 +49,20 @@ jobs:
                 results.xml
                 report.html
                 assets
+
+      - name: Notify Slack - Build Status
+        if: always()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: https://hooks.slack.com/services/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
+        with:
+          status: ${{ job.status }}
+          author_name: ${{ github.actor }}
+          commit_msg: ${{ github.event.head_commit.message }}
+          commit_url: ${{ github.event.head_commit.url }}
+          repo_name: ${{ github.repository }}
+          branch_name: ${{ github.ref_name }}
+          custom_message: |
+            ${{ job.status == 'success' && '✅ Python Tests zakończone pomyślnie' || '❌ Python Tests nie powiodły się' }} 
+            na gałęzi *${{ github.ref_name }}* przez *${{ github.actor }}*.
+            Szczegóły: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Zobacz na GitHubie>

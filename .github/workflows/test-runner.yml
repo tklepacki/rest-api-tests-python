@@ -67,7 +67,7 @@ jobs:
           server_port: ${{ secrets.SMTP_PORT }}
           username: ${{ secrets.SMTP_USERNAME }}
           password: ${{ secrets.SMTP_PASSWORD }}
-          subject: ${{ env.EMAIL_SUBJECT }}
+          subject: "${{ job.status == 'success' && '✅ Build Succeeded' || '❌ Build Failed' }} - ${{ github.repository }}"
           html_body: >
             <!DOCTYPE html><html><body>
             <h2>${{ job.status == 'success' && '✅ Build Succeeded' || '❌ Build Failed' }}</h2>

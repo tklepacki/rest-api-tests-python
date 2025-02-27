@@ -55,9 +55,9 @@ jobs:
           SLACK_COLOR: ${{ job.status == 'success' && 'good' || 'danger' }}
           SLACK_MESSAGE: |
             ${{ job.status == 'success' && '✅ Python Tests completed successfully' || '❌ Python Tests failed' }} 
-            on branch *${{ github.ref_name }}* by *${{ github.actor }}*.
+            on branch *${{ github.ref_name }}* by *${{ github.actor }}* using *Python ${{ matrix.python-version }}*.
             Details: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View on GitHub>
-          SLACK_TITLE: "Build Status: ${{ job.status }}"
+          SLACK_TITLE: "Build Status: ${{ job.status }} [Python ${{ matrix.python-version }}]"
 
       - name: Send Build Status Email
         uses: dawidd6/action-send-mail@v3
@@ -67,7 +67,7 @@ jobs:
           server_port: ${{ secrets.SMTP_PORT }}
           username: ${{ secrets.SMTP_USERNAME }}
           password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "${{ job.status == 'success' && '✅ Build Succeeded' || '❌ Build Failed' }} - ${{ github.repository }}"
+          subject: "${{ job.status == 'success' && '✅ Build Succeeded' || '❌ Build Failed' }} - ${{ github.repository }} [Python ${{ matrix.python-version }}]"
           html_body: >
             <!DOCTYPE html><html><body>
             <h2>${{ job.status == 'success' && '✅ Build Succeeded' || '❌ Build Failed' }}</h2>

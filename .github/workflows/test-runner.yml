@@ -72,11 +72,12 @@ jobs:
           password: ${{ secrets.SMTP_PASSWORD }}
           subject: "✅ Build Success - ${{ github.repository }}"
           body: >
-            <h2>✅ Build Succeeded!</h2>
+            <!DOCTYPE html><html><body><h2>✅ Build Succeeded!</h2>
             <p>Repository: <b>${{ github.repository }}</b></p>
             <p>Commit: <b>${{ github.sha }}</b></p>
             <p>Branch: <b>${{ github.ref_name }}</b></p>
             <p>Check the details on <a href="${{ github.server_url }}/actions">GitHub Actions</a>.</p>
+            </body></html>
           to: ${{ secrets.RECIPIENT_EMAIL }}
           from: ${{ secrets.SMTP_USERNAME }}
           content_type: text/html

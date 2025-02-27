@@ -61,3 +61,41 @@ jobs:
             on branch *${{ github.ref_name }}* by *${{ github.actor }}*.
             Details: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View on GitHub>
           SLACK_TITLE: "Build Status: ${{ job.status }}"
+
+      - name: Send success email
+        if: success()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "✅ Build Success - ${{ github.repository }}"
+          body: |
+            <h2>✅ Build Succeeded!</h2>
+            <p>Repository: <b>${{ github.repository }}</b></p>
+            <p>Commit: <b>${{ github.sha }}</b></p>
+            <p>Branch: <b>${{ github.ref_name }}</b></p>
+            <p>Check the details on <a href="${{ github.server_url }}/actions">GitHub Actions</a>.</p>
+          to: ${{ secrets.RECIPIENT_EMAIL }}
+          from: ${{ secrets.SMTP_USERNAME }}
+          content_type: text/html
+
+      - name: Send failure email
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "❌ Build Failed - ${{ github.repository }}"
+          body: |
+            <h2>❌ Build Failed!</h2>
+            <p>Repository: <b>${{ github.repository }}</b></p>
+            <p>Commit: <b>${{ github.sha }}</b></p>
+            <p>Branch: <b>${{ github.ref_name }}</b></p>
+            <p>Check the details on <a href="${{ github.server_url }}/actions">GitHub Actions</a>.</p>
+          to: ${{ secrets.RECIPIENT_EMAIL }}
+          from: ${{ secrets.SMTP_USERNAME }}
+          content_type: text/html

@@ -54,7 +54,7 @@ jobs:
         if: always()    # Always notify, regardless of success or failure
         uses: rtCamp/action-slack-notify@v2
         env:
-          SLACK_WEBHOOK: "https://hooks.slack.com/services/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"
+          SLACK_WEBHOOK: 'https://hooks.slack.com/services/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'
           SLACK_COLOR: ${{ job.status == 'success' && 'good' || 'danger' }}
           SLACK_MESSAGE: |
             ${{ job.status == 'success' && '✅ Python Tests zakończone pomyślnie' || '❌ Python Tests nie powiodły się' }} 

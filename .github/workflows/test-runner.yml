@@ -71,7 +71,7 @@ jobs:
           username: ${{ secrets.SMTP_USERNAME }}
           password: ${{ secrets.SMTP_PASSWORD }}
           subject: "✅ Build Success - ${{ github.repository }}"
-          body: |
+          body: >
             <h2>✅ Build Succeeded!</h2>
             <p>Repository: <b>${{ github.repository }}</b></p>
             <p>Commit: <b>${{ github.sha }}</b></p>

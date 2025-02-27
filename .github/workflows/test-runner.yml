@@ -71,7 +71,7 @@ jobs:
           username: ${{ secrets.SMTP_USERNAME }}
           password: ${{ secrets.SMTP_PASSWORD }}
           subject: "✅ Build Success - ${{ github.repository }}"
-          body: >
+          html_body: >
             <!DOCTYPE html><html><body><h2>✅ Build Succeeded!</h2>
             <p>Repository: <b>${{ github.repository }}</b></p>
             <p>Commit: <b>${{ github.sha }}</b></p>
@@ -80,7 +80,6 @@ jobs:
             </body></html>
           to: ${{ secrets.RECIPIENT_EMAIL }}
           from: ${{ secrets.SMTP_USERNAME }}
-          content_type: text/html
 
       - name: Send failure email
         if: failure()

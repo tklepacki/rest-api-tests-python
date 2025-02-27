@@ -57,7 +57,7 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_COLOR: ${{ job.status == 'success' && 'good' || 'danger' }}
           SLACK_MESSAGE: |
-            ${{ job.status == 'success' && '✅ Python Tests zakończone pomyślnie' || '❌ Python Tests nie powiodły się' }} 
-            na gałęzi *${{ github.ref_name }}* przez *${{ github.actor }}*.
-            Szczegóły: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Zobacz na GitHubie>
-          SLACK_TITLE: "Status builda: ${{ job.status }}"
+            ${{ job.status == 'success' && '✅ Python Tests completed successfully' || '❌ Python Tests failed' }} 
+            on branch *${{ github.ref_name }}* by *${{ github.actor }}*.
+            Details: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View on GitHub>
+          SLACK_TITLE: "Build Status: ${{ job.status }}"

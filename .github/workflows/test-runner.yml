@@ -4,28 +4,25 @@ run-name: Rest API Python Tests
 on:
   schedule:
     - cron: "*/2 * * * *"
-  workflow_dispatch:
-    inputs:
-      python_version:
-        description: 'Python version'
-        required: true
-        default: '3.13.2'
   push:
-  
+
 jobs:
-  Run-Tests:
+  test:
     runs-on: ubuntu-latest
-    
+
+    strategy:
+      matrix:
+        python-version: [3.11, 3.12, 3.13]
+
     steps:
-    
       - name: Checkout Repository
         uses: actions/checkout@v4
         
-      - name: Set up Python 3.13.2
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
         with:
-          python-version: '${{ github.event.inputs.python_version }}'
- 
+          python-version: ${{ matrix.python-version }}
+      
       - name: Run Tests
         run: |
              chmod +x -R ${{ github.workspace }}
@@ -44,7 +41,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success() || failure()
         with:
-          name: test-results
+          name: test-results-${{ matrix.python-version }}
           path: |
                 results.xml
                 report.html
@@ -58,28 +55,9 @@ jobs:
           SLACK_COLOR: ${{ job.status == 'success' && 'good' || 'danger' }}
           SLACK_MESSAGE: |
             ${{ job.status == 'success' && '✅ Python Tests completed successfully' || '❌ Python Tests failed' }} 
-            on branch *${{ github.ref_name }}* by *${{ github.actor }}*.
+            on branch *${{ github.ref_name }}* by *${{ github.actor }}* using *Python ${{ matrix.python-version }}*.
             Details: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View on GitHub>
-          SLACK_TITLE: "Build Status: ${{ job.status }}"
-
-      - name: Send success email
-        if: success()
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: ${{ secrets.SMTP_SERVER }}
-          server_port: ${{ secrets.SMTP_PORT }}
-          username: ${{ secrets.SMTP_USERNAME }}
-          password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "✅ Build Success - ${{ github.repository }}"
-          html_body: >
-            <!DOCTYPE html><html><body><h2>✅ Build Succeeded!</h2>
-            <p>Repository: <b>${{ github.repository }}</b></p>
-            <p>Commit: <b>${{ github.sha }}</b></p>
-            <p>Branch: <b>${{ github.ref_name }}</b></p>
-            <p>Check the details on <a href="${{ github.server_url }}/actions">GitHub Actions</a>.</p>
-            </body></html>
-          to: ${{ secrets.RECIPIENT_EMAIL }}
-          from: ${{ secrets.SMTP_USERNAME }}
+          SLACK_TITLE: "Build Status: ${{ job.status }} [Python ${{ matrix.python-version }}]"
 
       - name: Send Build Status Email
         uses: dawidd6/action-send-mail@v3
@@ -89,13 +67,14 @@ jobs:
           server_port: ${{ secrets.SMTP_PORT }}
           username: ${{ secrets.SMTP_USERNAME }}
           password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "${{ job.status == 'success' && '✅ Build Succeeded' || '❌ Build Failed' }} - ${{ github.repository }}"
+          subject: "${{ job.status == 'success' && '✅ Build Succeeded' || '❌ Build Failed' }} - ${{ github.repository }} [Python ${{ matrix.python-version }}]"
           html_body: >
             <!DOCTYPE html><html><body>
             <h2>${{ job.status == 'success' && '✅ Build Succeeded' || '❌ Build Failed' }}</h2>
             <p>Repository: <b>${{ github.repository }}</b></p>
             <p>Commit: <b>${{ github.sha }}</b></p>
             <p>Branch: <b>${{ github.ref_name }}</b></p>
+            <p>Python Version: <b>${{ matrix.python-version }}</b></p>
             <p>Check the details on <a href="${{ github.server_url }}/actions">GitHub Actions</a>.</p>
             </body></html>
           to: ${{ secrets.RECIPIENT_EMAIL }}

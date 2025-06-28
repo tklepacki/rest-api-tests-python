@@ -1,28 +1,28 @@
-name: Python Tests 
+name: Python Tests
 run-name: Rest API Python Tests
 
 on:
   push:
-   
-   jobs:
-   Run-Tests:
-   runs-on: ubuntu-latest
 
-   steps:
+jobs:
+  Run-Tests:
+    runs-on: ubuntu-latest
 
-   - name: Checkout Repository
-     uses: actions/checkout@v4
+    steps:
 
-    
-   - name: Set up Python 3.13.2
-     uses: actions/setup-python@v3
-     with:
-       python-version: 3.10.2
-    
-   - name: Run Tests
-     run: |
-        chmod +x ${{ github.workspace }}
-        pip install -r upgrade pip
-        pip install -r requirements.txt
-        export PYTHONPATH="${{ github.workspace }}"
-        python -s tests/part_01/test_users.py
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set Up Python 3.13.2
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.13.2
+
+      - name: Run Tests
+        run: |
+             chmod +x -R ${{ github.workspace }}
+             pip install --upgrade pip
+             pip install -r requirements.txt
+             export PYTHONPATH=${PYTHONPATH}:${{ github.workspace }}
+             pytest -s tests/part_01/test_users.py
+

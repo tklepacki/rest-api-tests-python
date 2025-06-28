@@ -1,0 +1,195 @@
+pipeline {
+    agent { label 'local_machine' }
+
+    parameters {
+        string(name: 'BRANCH', defaultValue: 'main', description: 'Git branch to build')
+    }
+    
+    triggers {
+        cron '*/2 * * * *'
+    }
+
+    stages {
+        stage('GIT Checkout') {
+            steps {
+                git branch: "${params.BRANCH}", url: 'https://github.com/tklepacki/rest-api-tests-python'
+            }
+        }
+        
+        stage('Environment Setup') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh '''
+                        python -m ensurepip --default-pip
+                        python -m pip install --upgrade pip setuptools wheel
+                        pip install virtualenv
+                        virtualenv myenv
+                        source myenv/bin/activate
+                        cd "$WORKSPACE"
+                        pip install -r requirements.txt
+                        '''
+                    } else {
+                        bat '''
+                        set PATH=C:\\Users\\tklep\\AppData\\Local\\Programs\\Python\\Python313\\;C:\\Users\\tklep\\AppData\\Local\\Programs\\Python\\Python313\\Scripts\\
+                        python -m ensurepip --default-pip
+                        python -m pip install --upgrade pip setuptools wheel
+                        pip install virtualenv
+                        virtualenv myenv
+                        call myenv\\Scripts\\activate
+                        cd "%WORKSPACE%"
+                        pip install -r requirements.txt
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Run Tests') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh '''
+                        source myenv/bin/activate
+                        export PYTHONPATH=$PYTHONPATH:$WORKSPACE
+                        pytest -s tests/part_01/test_users.py --junitxml=results.xml --html=report.html
+                        '''
+                    } else {
+                        bat '''
+                        call myenv\\Scripts\\activate
+                        call set PYTHONPATH=%PYTHONPATH%;"%WORKSPACE%"
+                        call pytest -s tests/part_01/test_users.py --junitxml=results.xml --html=report.html
+                        '''
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            junit 'results.xml'
+            archiveArtifacts artifacts: 'report.html', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'assets/**', allowEmptyArchive: true
+        }
+        
+    failure {
+        script {
+            slackSend channel: '#build-failures', 
+                color: 'danger', 
+                message: ":x: Build #${env.BUILD_NUMBER} *FAILED*! :fire: \n *Job:* ${env.JOB_NAME} \n *Check logs:* ${env.BUILD_URL}"
+            }
+        mail(
+            from: 'jenkins@company.com',
+            to: 't.klepacki@wp.pl',
+            subject: "❌ FAILURE: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+            body: """
+                <html>
+                    <head>
+                        <style>
+                            body {
+                                font-family: Arial, sans-serif;
+                                background-color: #f4f4f9;
+                                padding: 20px;
+                            }
+                            .container {
+                                background-color: #fff;
+                                padding: 20px;
+                                border-radius: 8px;
+                                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+                            }
+                            h2 {
+                                color: #D9534F;
+                            }
+                            p {
+                                font-size: 14px;
+                                color: #333;
+                            }
+                            a {
+                                color: #0275D8;
+                                text-decoration: none;
+                                font-weight: bold;
+                            }
+                            .footer {
+                                margin-top: 20px;
+                                font-size: 12px;
+                                color: #777;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <h2>🚨 Build Failed</h2>
+                            <p><strong>Job:</strong> ${env.JOB_NAME} [${env.BUILD_NUMBER}] has failed.</p>
+                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                            <p><strong>Check the details:</strong> <a href="${env.BUILD_URL}">Build Logs</a></p>
+                            <p><strong>Console Output:</strong> <a href="${env.BUILD_URL}console">View Console Output</a></p>
+                        </div>
+                        <div class="footer">
+                            <p>This is an automated message from Jenkins CI/CD.</p>
+                        </div>
+                    </body>
+                </html>
+            """,
+            mimeType: 'text/html'
+        )
+    }
+        
+    success {
+        mail(
+            from: 'jenkins@company.com',
+            to: 't.klepacki@wp.pl',
+            subject: "✅ SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+            body: """
+                <html>
+                    <head>
+                        <style>
+                            body {
+                                font-family: Arial, sans-serif;
+                                background-color: #f4f4f9;
+                                padding: 20px;
+                            }
+                            .container {
+                                background-color: #fff;
+                                padding: 20px;
+                                border-radius: 8px;
+                                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+                            }
+                            h2 {
+                                color: #5CB85C;
+                            }
+                            p {
+                                font-size: 14px;
+                                color: #333;
+                            }
+                            a {
+                                color: #0275D8;
+                                text-decoration: none;
+                                font-weight: bold;
+                            }
+                            .footer {
+                                margin-top: 20px;
+                                font-size: 12px;
+                                color: #777;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <h2>✅ Build Succeeded</h2>
+                            <p><strong>Job:</strong> ${env.JOB_NAME} [${env.BUILD_NUMBER}] completed successfully.</p>
+                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                            <p><strong>Check the details:</strong> <a href="${env.BUILD_URL}">Build Logs</a></p>
+                            <p><strong>Console Output:</strong> <a href="${env.BUILD_URL}console">View Console Output</a></p>
+                        </div>
+                        <div class="footer">
+                            <p>This is an automated message from Jenkins CI/CD.</p>
+                        </div>
+                    </body>
+                </html>
+            """,
+            mimeType: 'text/html'
+            )
+        }
+    }
+}

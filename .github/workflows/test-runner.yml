@@ -37,7 +37,7 @@ jobs:
         if: success() || failure()
         with:
           name: test-results
-          paths: |
+          path: |
                  results.xml
                  report.html
                  assets

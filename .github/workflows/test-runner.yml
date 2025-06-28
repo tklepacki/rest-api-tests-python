@@ -33,7 +33,7 @@ jobs:
           paths: results.xml
 
       - name: Upload Pytest Test Results
-        uses: action/upload-artifact@v4
+        uses: actions/upload-artifact@v4
         if: success() || failure()
         with:
           name: test-results

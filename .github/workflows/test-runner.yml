@@ -23,7 +23,7 @@ jobs:
       - name: Set Up Python 3.13.2
         uses: actions/setup-python@v3
         with:
-          python-version: '${{ github.event.inputs.python_version }}'
+          python-version: '${{ github.event.inputs.python-version }}'
 
       - name: Run Tests
         run: |

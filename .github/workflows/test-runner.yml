@@ -35,7 +35,7 @@ jobs:
       - name: Upload Pytest Test Results
         uses: action/upload-artifact@v4
         if: success() || failure()
-        path: |
+        paths: |
               results.xml
               report.html
               assets

@@ -1,0 +1,276 @@
+{
+	"definitions": {},
+	"$schema": "http://json-schema.org/draft-07/schema#", 
+	"$id": "https://example.com/object1774178603.json", 
+	"title": "Root", 
+	"type": "object",
+	"required": [
+		"page",
+		"per_page",
+		"total",
+		"total_pages",
+		"data",
+		"support",
+		"_meta"
+	],
+	"properties": {
+		"page": {
+			"$id": "#root/page", 
+			"title": "Page", 
+			"type": "integer",
+			"examples": [
+				2
+			],
+			"default": 0
+		},
+		"per_page": {
+			"$id": "#root/per_page", 
+			"title": "Per_page", 
+			"type": "integer",
+			"examples": [
+				6
+			],
+			"default": 0
+		},
+		"total": {
+			"$id": "#root/total", 
+			"title": "Total", 
+			"type": "integer",
+			"examples": [
+				12
+			],
+			"default": 0
+		},
+		"total_pages": {
+			"$id": "#root/total_pages", 
+			"title": "Total_pages", 
+			"type": "integer",
+			"examples": [
+				2
+			],
+			"default": 0
+		},
+		"data": {
+			"$id": "#root/data", 
+			"title": "Data", 
+			"type": "array",
+			"default": [],
+			"items":{
+				"$id": "#root/data/items", 
+				"title": "Items", 
+				"type": "object",
+				"required": [
+					"id",
+					"email",
+					"first_name",
+					"last_name",
+					"avatar"
+				],
+				"properties": {
+					"id": {
+						"$id": "#root/data/items/id", 
+						"title": "Id", 
+						"type": "integer",
+						"examples": [
+							7
+						],
+						"default": 0
+					},
+					"email": {
+						"$id": "#root/data/items/email", 
+						"title": "Email", 
+						"type": "string",
+						"default": "",
+						"examples": [
+							"michael.lawson@reqres.in"
+						],
+						"pattern": "^.*$"
+					},
+					"first_name": {
+						"$id": "#root/data/items/first_name", 
+						"title": "First_name", 
+						"type": "string",
+						"default": "",
+						"examples": [
+							"Michael"
+						],
+						"pattern": "^.*$"
+					},
+					"last_name": {
+						"$id": "#root/data/items/last_name", 
+						"title": "Last_name", 
+						"type": "string",
+						"default": "",
+						"examples": [
+							"Lawson"
+						],
+						"pattern": "^.*$"
+					},
+					"avatar": {
+						"$id": "#root/data/items/avatar", 
+						"title": "Avatar", 
+						"type": "string",
+						"default": "",
+						"examples": [
+							"https://reqres.in/img/faces/7-image.jpg"
+						],
+						"pattern": "^.*$"
+					}
+				}
+			}
+
+		},
+		"support": {
+			"$id": "#root/support", 
+			"title": "Support", 
+			"type": "object",
+			"required": [
+				"url",
+				"text"
+			],
+			"properties": {
+				"url": {
+					"$id": "#root/support/url", 
+					"title": "Url", 
+					"type": "string",
+					"default": "",
+					"examples": [
+						"https://benhowdle.im/first-cto-playbook?utm_source=reqres&utm_medium=json&utm_campaign=referral"
+					],
+					"pattern": "^.*$"
+				},
+				"text": {
+					"$id": "#root/support/text", 
+					"title": "Text", 
+					"type": "string",
+					"default": "",
+					"examples": [
+						"Become a better CTO. A playbook of painful stories and practical advice from a two-time startup CTO."
+					],
+					"pattern": "^.*$"
+				}
+			}
+		}
+,
+		"_meta": {
+			"$id": "#root/_meta", 
+			"title": "_meta", 
+			"type": "object",
+			"required": [
+				"powered_by",
+				"docs_url",
+				"upgrade_url",
+				"example_url",
+				"variant",
+				"message",
+				"cta",
+				"context"
+			],
+			"properties": {
+				"powered_by": {
+					"$id": "#root/_meta/powered_by", 
+					"title": "Powered_by", 
+					"type": "string",
+					"default": "",
+					"examples": [
+						"ReqRes"
+					],
+					"pattern": "^.*$"
+				},
+				"docs_url": {
+					"$id": "#root/_meta/docs_url", 
+					"title": "Docs_url", 
+					"type": "string",
+					"default": "",
+					"examples": [
+						"https://app.reqres.in/documentation"
+					],
+					"pattern": "^.*$"
+				},
+				"upgrade_url": {
+					"$id": "#root/_meta/upgrade_url", 
+					"title": "Upgrade_url", 
+					"type": "string",
+					"default": "",
+					"examples": [
+						"https://app.reqres.in/upgrade"
+					],
+					"pattern": "^.*$"
+				},
+				"example_url": {
+					"$id": "#root/_meta/example_url", 
+					"title": "Example_url", 
+					"type": "string",
+					"default": "",
+					"examples": [
+						"https://app.reqres.in/examples/notes-app"
+					],
+					"pattern": "^.*$"
+				},
+				"variant": {
+					"$id": "#root/_meta/variant", 
+					"title": "Variant", 
+					"type": "string",
+					"default": "",
+					"examples": [
+						"v1_b"
+					],
+					"pattern": "^.*$"
+				},
+				"message": {
+					"$id": "#root/_meta/message", 
+					"title": "Message", 
+					"type": "string",
+					"default": "",
+					"examples": [
+						"Need more than fake data? Projects give you real CRUD + auth in minutes."
+					],
+					"pattern": "^.*$"
+				},
+				"cta": {
+					"$id": "#root/_meta/cta", 
+					"title": "Cta", 
+					"type": "object",
+					"required": [
+						"label",
+						"url"
+					],
+					"properties": {
+						"label": {
+							"$id": "#root/_meta/cta/label", 
+							"title": "Label", 
+							"type": "string",
+							"default": "",
+							"examples": [
+								"Get started"
+							],
+							"pattern": "^.*$"
+						},
+						"url": {
+							"$id": "#root/_meta/cta/url", 
+							"title": "Url", 
+							"type": "string",
+							"default": "",
+							"examples": [
+								"https://app.reqres.in/upgrade"
+							],
+							"pattern": "^.*$"
+						}
+					}
+				}
+,
+				"context": {
+					"$id": "#root/_meta/context", 
+					"title": "Context", 
+					"type": "string",
+					"default": "",
+					"examples": [
+						"legacy_success"
+					],
+					"pattern": "^.*$"
+				}
+			}
+		}
+
+	}
+}

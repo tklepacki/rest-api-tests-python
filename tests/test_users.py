@@ -46,4 +46,6 @@ def test_get_user_request():
     assert (user_data["avatar"] == "https://reqres.in/img/faces/2-image.jpg"), f"User avatar validation failed for {user_response.request.url}"
     assert (user_response.headers['content-type'] == "application/json; charset=utf-8"), f"Content type validation failed for {user_response.request.url}"
 
+    validate(instance=user_response.json(), schema=helper.read_json("../schemas/user.json"))
+
     yield

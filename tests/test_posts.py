@@ -51,5 +51,36 @@ def test_delete_post_request():
     post_ids = [item["id"] for item in posts_list]
 
     assert added_post_id not in post_ids, f"Post deletion failed for {delete_post_response.request.url}"
-    
+
+    yield
+
+@test_steps('edit_post_request')
+def test_edit_post_request():
+    body = {
+        "title": "TestTitle",
+        "views": 100,
+    }
+
+    add_post_response = posts.add_post(body)
+    added_post_data = add_post_response.json()
+
+    assert (add_post_response.status_code == 201), f"Status Code validation failed for {add_post_response.request.url}"
+
+    added_post_id = added_post_data["id"]
+
+    edit_body = {
+        "title": "EditedTestTitle",
+        "views": 150,
+    }
+
+    edit_post_response = posts.edit_post(added_post_id, edit_body)
+
+    assert (edit_post_response.status_code == 200), f"Status Code validation failed for {edit_post_response.request.url}"
+
+    get_post_response = posts.get_post(added_post_id)
+    post_data = get_post_response.json()
+
+    assert (post_data["title"] == "EditedTestTitle"), f"Post title validation failed for {edit_post_response.request.url}"
+    assert (post_data["views"] == 150), f"Post views validation failed for {edit_post_response.request.url}"   
+
     yield

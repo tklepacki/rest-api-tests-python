@@ -32,7 +32,7 @@ jobs:
         with:
           name: Test Results
           path: results.xml
-          reporter: python-pytest
+          reporter: java-junit
 
       - name: Create Test Summary
         uses: test-summary/action@dist

@@ -26,6 +26,14 @@ jobs:
              export PYTHONPATH=${PYTHONPATH}:${{ github.workspace }}
              pytest -s tests/part_01/test_users.py --junitxml=results.xml
 
+      - name: Publish Test Results
+        uses: dorny/test-reporter@v3
+        if: success() || failure()
+        with:
+          name: Test Results
+          path: results.xml
+          reporter: python-pytest
+
       - name: Create Test Summary
         uses: test-summary/action@dist
         if: success() || failure()
